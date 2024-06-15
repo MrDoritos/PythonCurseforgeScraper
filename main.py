@@ -9,24 +9,29 @@ import time
 
 #Global State
 
+api_url = 'https://api.curseforge.com/v1'
+output_dir = './curseforge'
+
 con = None
 cur = None
-
-client = requests.Session()
-client.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 OverwolfClient/0.204.0.1'})
-client.headers.update({'Accept': 'application/json'})
-client.headers.update({'Accept-Encoding': 'gzip'})
-client.headers.update({'x-api-key': '$2a$10$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm'})
-client.headers.update({'Authorization': 'OAuth'})
-client.headers.update({'X-Twitch-Id': ''})
-
-api_url = 'https://api.curseforge.com/v1'
-last_request = time.time() - 1
-
-output_dir = './curseforge'
+api_key = None
 
 target_games = [432]
 target_categories = [399]
+
+with open('api_key.txt', 'r') as f:
+    api_key = f.read().strip()
+
+client = requests.Session()
+
+client.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 OverwolfClient/0.204.0.1'})
+client.headers.update({'Accept': 'application/json'})
+client.headers.update({'Accept-Encoding': 'gzip'})
+client.headers.update({'x-api-key': api_key})
+client.headers.update({'Authorization': 'OAuth'})
+client.headers.update({'X-Twitch-Id': ''})
+
+last_request = time.time() - 1
 
 #Helper functions
 
@@ -64,11 +69,7 @@ def request_exists(url:str):
     return cur.fetchone()[0] == 1
 
 def insert_request(url:str, json_data:str, time):
-    if request_exists(url):
-        #Overwrite
-        cur.execute('UPDATE api SET json=?, time=? WHERE url=?', (json.dumps(json_data), time, url))
-    else:
-        cur.execute('INSERT INTO api(url, json, time) VALUES(?,?,?)', (url, json.dumps(json_data), time))
+    cur.execute('INSERT OR REPLACE INTO api(url, json, time) VALUES(?,?,?)', (url, json.dumps(json_data), time))
 
 def get_request(url:str):
     cur.execute('SELECT json FROM api WHERE url=?', (url,))
@@ -138,33 +139,17 @@ def field_exists(table:str, id:int):
     return cur.fetchone()[0] == 1
 
 def insert_category(category:dict):
-    if field_exists('categories', category['id']):
-        #Overwrite
-        cur.execute('UPDATE categories SET name=?, slug=?, gameId=?, json=? WHERE id=?', (category['name'], category['slug'], category['gameId'], json.dumps(category), category['id']))
-    else:
-        cur.execute('INSERT INTO categories(id, name, slug, gameId, json) VALUES(?,?,?,?,?)', (category['id'], category['name'], category['slug'], category['gameId'], json.dumps(category)))
+    cur.execute('INSERT OR REPLACE INTO categories(id, name, slug, gameId, json) VALUES(?,?,?,?,?)', (category['id'], category['name'], category['slug'], category['gameId'], json.dumps(category)))
 
 def insert_game(game:dict):
-    if field_exists('games', game['id']):
-        #Overwrite
-        cur.execute('UPDATE games SET name=?, slug=?, json=? WHERE id=?', (game['name'], game['slug'], json.dumps(game), game['id']))
-    else:
-        cur.execute('INSERT INTO games(id, name, slug, json) VALUES(?,?,?,?)', (game['id'], game['name'], game['slug'], json.dumps(game)))
+    cur.execute('INSERT OR REPLACE INTO games(id, name, slug, json) VALUES(?,?,?,?)', (game['id'], game['name'], game['slug'], json.dumps(game)))
 
 def insert_mod(mod:dict):
     categoryIds = json.dumps([x['id'] for x in mod['categories']])
-    if field_exists('mods', mod['id']):
-        #Overwrite
-        cur.execute('UPDATE mods SET name=?, slug=?, gameId=?, categoryIds=?, json=? WHERE id=?', (mod['name'], mod['slug'], mod['gameId'], categoryIds, json.dumps(mod), mod['id']))
-    else:
-        cur.execute('INSERT INTO mods(id, name, slug, gameId, categoryIds, json) VALUES(?,?,?,?,?,?)', (mod['id'], mod['name'], mod['slug'], mod['gameId'], categoryIds, json.dumps(mod)))
+    cur.execute('INSERT OR REPLACE INTO mods(id, name, slug, gameId, categoryIds, json) VALUES(?,?,?,?,?,?)', (mod['id'], mod['name'], mod['slug'], mod['gameId'], categoryIds, json.dumps(mod)))
     
 def insert_file(file:dict):
-    if field_exists('files', file['id']):
-        #Overwrite
-        cur.execute('UPDATE files SET displayName=?, fileName=?, gameId=?, modId=?, json=? WHERE id=?', (file['displayName'], file['fileName'], file['gameId'], file['modId'], json.dumps(file), file['id']))
-    else:
-        cur.execute('INSERT INTO files(id, displayName, fileName, gameId, modId, json) VALUES(?,?,?,?,?,?)', (file['id'], file['displayName'], file['fileName'], file['gameId'], file['modId'], json.dumps(file)))
+    cur.execute('INSERT OR REPLACE INTO files(id, displayName, fileName, gameId, modId, json) VALUES(?,?,?,?,?,?)', (file['id'], file['displayName'], file['fileName'], file['gameId'], file['modId'], json.dumps(file)))
 
 #Start program
 
@@ -173,20 +158,11 @@ os.makedirs(output_dir, exist_ok=True)
 con = sqlite3.connect(output_dir + '/curseforge.db')
 cur = con.cursor()
 
-if not table_exists('games'):
-    cur.execute('CREATE TABLE games(id, name, slug, json)')
-
-if not table_exists('categories'):
-    cur.execute('CREATE TABLE categories(id, name, slug, gameId, json)')
-
-if not table_exists('mods'):
-    cur.execute('CREATE TABLE mods(id, name, slug, gameId, categoryIds, json)')
-
-if not table_exists('files'):
-    cur.execute('CREATE TABLE files(id, displayName, fileName, gameId, modId, json)')
-
-if not table_exists('api'):
-    cur.execute('CREATE TABLE api(url, time, json)')
+cur.execute('CREATE TABLE IF NOT EXISTS games(id, name, slug, json)')
+cur.execute('CREATE TABLE IF NOT EXISTS categories(id, name, slug, gameId, json)')
+cur.execute('CREATE TABLE IF NOT EXISTS mods(id, name, slug, gameId, categoryIds, json)')
+cur.execute('CREATE TABLE IF NOT EXISTS files(id, displayName, fileName, gameId, modId, json)')
+cur.execute('CREATE TABLE IF NOT EXISTS api(url, time, json)')
 
 con.commit()
 
@@ -202,8 +178,8 @@ for game_stub in games['data']:
     
     print('Processing game: ' + game_stub['name'])
 
-    #game = get_json('/games/' + str(game_id), True, True)
-    #versions = get_json(f'/games/{game_id}/versions', True, True)
+    game = get_json('/games/' + str(game_id), True, True)
+    versions = get_json(f'/games/{game_id}/versions', True, True)
     categories = get_json(f'/categories?gameId={game_id}', True, True)
 
     for category_stub in categories['data']:
