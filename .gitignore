@@ -1,2 +1,6 @@
 curseforge
+__pycache__
 api_key.txt
+*.txt
+*.tar.gz
+*.7z
