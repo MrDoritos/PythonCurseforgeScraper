@@ -26,6 +26,9 @@ class Api_helper:
         self.client.headers.update({'X-Twitch-Id': ''})
 
     def get_api_key(self, file):
+        if not os.path.isfile(file):
+            raise Exception('API key file not found: ' + file)
+        
         with open(file, 'r') as f:
             return f.read().strip()
     
