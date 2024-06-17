@@ -14,12 +14,13 @@ config = importlib.import_module('config')
 
 #Global State
 
+#Set these arrays to change which games / categories are captured
+#Just run the program to see the ids when they populate in the database
+
 target_games = [] #432
 target_categories = [] #399
 
 #Start program
-
-os.makedirs(config.output_dir, exist_ok=True)
 
 db = sqlite_helper.Sqlite_helper(config.output_dir + '/curseforge.db')
 api = api_helper.Api_helper(db)
@@ -28,7 +29,9 @@ for game_stub in api.get_json('/games', True, True)['data']:
     db.insert_game(game_stub)
 
     game_id = game_stub['id']
-    if game_id not in target_games: continue
+
+    if len(target_games) > 0 and game_id not in target_games: 
+        continue
     
     print('Processing game: ' + game_stub['name'])
 
@@ -40,6 +43,9 @@ for game_stub in api.get_json('/games', True, True)['data']:
         db.insert_category(category_stub)
 
         category_id = category_stub['id']
+
+        if len(target_categories) > 0 and category_id not in target_categories: 
+            continue
 
         print('Processing category: ' + category_stub['name'])
 
