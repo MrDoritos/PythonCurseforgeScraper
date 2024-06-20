@@ -79,51 +79,61 @@ class Api_helper:
 
 
 class Depaginator:
-    def __init__(self, api, url, index=0, pageSize=50):
+    def __init__(self, api, url, index=0, pageSize=50, write_local=True, use_local=True):
         self.api = api
         self.url = url
         self.index = index
         self.pageSize = pageSize
         self.page = None
+        self.write_local = write_local
+        self.use_local = use_local
+
+        self.current_url = self.format_url()
     
-    def get_page(self):
+    def format_url(self):
         append = f'index={self.index}&pageSize={self.pageSize}'
-        new_url = self.url
+        self.current_url = self.url
         if self.url[-1] == '?' or self.url[-1] == '&':
-            new_url = self.url + append #Remove first &
+            self.current_url = self.url + append #Remove first &
         else:
-            new_url = self.url + '&' + append 
-        return self.api.get_json(new_url, True, True)
+            self.current_url = self.url + '&' + append 
+        return self.current_url
+
+    def get_page(self):
+        return self.api.get_json(self.format_url(), self.write_local, self.use_local)
 
     def __iter__(self):
-        print("Getting page 0", end=' ')
-        self.page = self.get_page()
         return self
     
     def __next__(self):
-        x = self.page
-
         # Iteration over when index + resultCount >= totalCount
         # However we must return the previous retrieved page and call stopiteration next iteration
 
-        finish = False
 
-        resultCount = self.page['pagination']['resultCount']
-        totalCount = self.page['pagination']['totalCount']
+        if self.page != None:
+            if self.page.get('pagination', None) == None:
+                raise StopIteration()
+            
+            resultCount = self.page['pagination']['resultCount']
+            totalCount = self.page['pagination']['totalCount']
 
-        if self.index + resultCount >= totalCount:
-            finish = True
+            if self.index >= totalCount:
+                raise StopIteration()
+            
+            if self.index + resultCount >= totalCount:
+                raise StopIteration()
+            
+            self.index += self.pageSize
 
-        if self.index >= totalCount:
+        try:
+            self.page = self.get_page()
+            self.page['url'] = self.current_url
+        except Exception as e:
+            print(e)
             raise StopIteration()
 
-        self.index += self.pageSize
-
-        if not finish:
-            try:    
-                print(f"Getting ({self.index}/{totalCount})", end=' ')
-                self.page = self.get_page()
-            except:
-                raise StopIteration()
+        if self.page.get('pagination', None) == None:
+            print('Url is not paginated')
+            return self.page
         
-        return x
+        return self.page

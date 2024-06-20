@@ -16,22 +16,22 @@ class Sqlite_helper:
 
     def request_exists(self, url:str):
         self.cur.execute('SELECT count(*) FROM api WHERE url=?', (url,))
-        return self.cur.fetchone()[0] == 1
+        return self.cur.fetchone()[0] > 0
 
     def insert_request(self, url:str, json_data:str, time):
         self.cur.execute('INSERT OR REPLACE INTO api(url, json, time) VALUES(?,?,?)', (url, json.dumps(json_data), time))
 
     def get_request(self, url:str):
-        self.cur.execute('SELECT json FROM api WHERE url=?', (url,))
+        self.cur.execute('SELECT json FROM api WHERE url=? ORDER BY time', (url,))
         return self.cur.fetchone()[0]
     
     def table_exists(self, table:str):
         self.cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", (table,))
-        return self.cur.fetchone()[0] == 1
+        return self.cur.fetchone()[0] > 0
 
     def field_exists(self, table:str, id:int):
         self.cur.execute(f'SELECT count(*) FROM {table} WHERE id=?', (id,))
-        return self.cur.fetchone()[0] == 1
+        return self.cur.fetchone()[0] > 0
 
     def insert_category(self, category:dict):
         self.cur.execute('INSERT OR REPLACE INTO categories(id, name, slug, gameId, json) VALUES(?,?,?,?,?)', (category['id'], category['name'], category['slug'], category['gameId'], json.dumps(category)))
