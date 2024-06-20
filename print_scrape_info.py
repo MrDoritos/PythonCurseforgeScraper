@@ -43,12 +43,19 @@ print(url_slugs)
 # Ideal file count
 
 ideal_file_count = 0
+api_entry_count = 0
 db.cur.execute("SELECT * FROM api")
-for api_raw in db.cur:
-    if 'files' in api_raw[0]:
-        json_data = json.loads(api_raw[2])
-        ideal_file_count += len(json_data['data'])
-print("Theoretical file count:", ideal_file_count)
+
+with open(f'{config.output_dir}/file_id_list.txt', 'w') as f:
+    for api_raw in db.cur:
+        if 'files' in api_raw[0]:
+            api_entry_count += 1
+            json_data = json.loads(api_raw[2])
+            ideal_file_count += len(json_data['data'])
+            #print([x['id'] for x in json_data['data']])
+            for entry in json_data['data']:
+                f.write(f'{entry["id"]}\n')
+print("Theoretical file count:", ideal_file_count, "API entry count:", api_entry_count)
 
 # Save files to a download list
 

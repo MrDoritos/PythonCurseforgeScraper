@@ -103,16 +103,27 @@ class Depaginator:
     def __next__(self):
         x = self.page
 
-        if self.index + self.page['pagination']['resultCount'] >= self.page['pagination']['totalCount']:
+        # Iteration over when index + resultCount >= totalCount
+        # However we must return the previous retrieved page and call stopiteration next iteration
+
+        finish = False
+
+        resultCount = self.page['pagination']['resultCount']
+        totalCount = self.page['pagination']['totalCount']
+
+        if self.index + resultCount >= totalCount:
+            finish = True
+
+        if self.index >= totalCount:
             raise StopIteration()
 
-        print(f"Getting ({self.index}/{self.page['pagination']['totalCount']})", end=' ')
+        self.index += self.pageSize
 
-        self.index = self.index + self.pageSize
-
-        try:
-            self.page = self.get_page()
-        except:
-            raise StopIteration()
+        if not finish:
+            try:    
+                print(f"Getting ({self.index}/{totalCount})", end=' ')
+                self.page = self.get_page()
+            except:
+                raise StopIteration()
         
         return x

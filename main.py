@@ -17,8 +17,8 @@ config = importlib.import_module('config')
 #Set these arrays to change which games / categories are captured
 #Just run the program to see the ids when they populate in the database
 
-target_games = [] #432
-target_categories = [] #399
+target_games = [-1] #432
+target_categories = [-1] #399
 
 #Start program
 
@@ -58,12 +58,16 @@ for game_stub in api.get_json('/games', True, True)['data']:
 cur_2 = db.con.cursor()
 cur_2.execute("SELECT * FROM mods")
 
+iter = 0
 for mod_row in cur_2:
-    print('Processing mod: ' + mod_row[1])
+    print('Processing mod: ' + mod_row[1], f'({mod_row[0]})')
     for result in api_helper.Depaginator(api, f'/mods/{mod_row[0]}/files?'):
         for file_stub in result['data']:
             db.insert_file(file_stub)
-    db.con.commit()
+            
+    iter += 1
+    if iter % 50 == 0:
+        db.con.commit()
 
 print("Done")
 
