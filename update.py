@@ -132,12 +132,15 @@ for row in cur_2:
     last_request = when_last_request(depag.current_url)
 
     if modify_time < last_request:
+        print(f'{json_data["id"]}.', end='')
         continue
 
     print(f'Updating files for {json_data["slug"]} ({json_data["id"]}) ({modify_time} >= {last_request})')
     for result in depag:
         for file_stub in result['data']:
             db.insert_file(file_stub)
+
+    db.con.commit()
 
 print("Done")
 
