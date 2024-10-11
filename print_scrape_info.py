@@ -18,22 +18,24 @@ db.cur.execute("SELECT * FROM mods")
 url_slugs = dict()
 slug_files = dict()
 
-for row in db.cur:
-    json_data = json.loads(row[5])
-    url = json_data['links']['websiteUrl']
-    if len(url):
-        slug = url.split('/')[-2]
+with open(f'{config.output_dir}/mod_json_dump.txt', 'w') as json_dump:
+    for row in db.cur:
+        json_dump.write(f'{row[5]}\n')
+        json_data = json.loads(row[5])
+        url = json_data['links']['websiteUrl']
+        if len(url):
+            slug = url.split('/')[-2]
 
-        if slug:
-            if slug_files.get(slug,0)==0:
-                slug_files[slug] = open(f'{config.output_dir}/{slug}.txt', 'w')
+            if slug:
+                if slug_files.get(slug,0)==0:
+                    slug_files[slug] = open(f'{config.output_dir}/{slug}.txt', 'w')
 
-            v = url_slugs.get(slug, 0)
-            url_slugs[slug] = v + 1
+                v = url_slugs.get(slug, 0)
+                url_slugs[slug] = v + 1
 
-            slug_files[slug].write(f'{json_data["id"]},{json_data["slug"]}\n')
-        else:
-            print(f'No slug found for: {url} ({json_data["slug"]})')
+                slug_files[slug].write(f'{json_data["id"]},{json_data["slug"]}\n')
+            else:
+                print(f'No slug found for: {url} ({json_data["slug"]})')
 
 for slug in slug_files:
     slug_files[slug].close()

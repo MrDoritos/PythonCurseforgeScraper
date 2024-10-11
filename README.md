@@ -1,4 +1,4 @@
-# Python CurseforgeScraper
+# Python Curseforge Scraper
 
 ## You must supply an api key in the file `api_key.txt`
 
