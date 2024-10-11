@@ -11,6 +11,13 @@ config = importlib.import_module("config")
 db = sqlite_helper.Sqlite_helper(config.output_dir + '/curseforge.db')
 api = api_helper.Api_helper(db)
 
+day = 86400
+hour = 3600
+week = 604800
+
+target_games = [432]
+target_categories = []
+
 def when_last_request(url):
     if not db.request_exists(url):
         return 0
@@ -32,17 +39,16 @@ def should_update_entries(url, time_diff):
 
     return res
 
-day = 86400
-hour = 3600
-week = 604800
+def read_time(stime):
+    try:
+        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
+    except:
+        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
 
 if should_update_entries('/games', week):
     for result in api_helper.Depaginator(api, '/games', use_local=False):
         for game_stub in result['data']:
-            #continue
             db.insert_game(game_stub)
-
-target_games = [432]
 
 if len(target_games) == 0: 
     # Determine game list from db
@@ -55,10 +61,7 @@ for game_id in target_games:
     if should_update_entries(f'/categories?gameId={game_id}', week):
         for result in api_helper.Depaginator(api, f'/categories?gameId={game_id}', use_local=False):
             for category_stub in result['data']:
-                #continue
                 db.insert_category(category_stub)
-
-target_categories = [] # 0 for all
 
 if len(target_categories) == 0:
     # Determine category list from db
@@ -67,29 +70,24 @@ if len(target_categories) == 0:
 
 print("Target categories:", target_categories)
 
-def read_time(stime):
-    try:
-        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
-    except:
-        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
-
 for category_id in target_categories:
+    # Iterate category list
     db.cur.execute('SELECT gameId FROM categories WHERE id=?', (category_id,))
     game_id = db.cur.fetchone()[0]
-    #game_id = 432
     url = f'/mods/search?categoryId={category_id}&gameId={game_id}&sortField=3&sortOrder=desc'
 
     depag = api_helper.Depaginator(api, url, use_local=False)
     
     if should_update_entries(depag.current_url, day):
+        # If results for category search results updated in the last day
         for result in depag:
             stale_count = 0
             last_request = when_last_request(depag.current_url)
             print(f'Last request for ({depag.current_url}): {last_request}')
 
             for mod_stub in result['data']:
+                # Iterate search listing for addon ids
                 if not db.field_exists('mods', mod_stub['id']):
-                    #print('New mod stub found, inserting')
                     db.insert_mod(mod_stub)
                     continue
                 
@@ -103,13 +101,10 @@ for category_id in target_categories:
                 stale_date = read_time(stale_date_json)
 
                 if mod_date > stale_date:
-                    #print('Mod stub is stale, updating')
                     db.insert_mod(mod_stub)
                     continue
 
-                #print('Mod stub is not stale, skipping')
                 stale_count += 1
-                
 
             print('Stale count:', stale_count, 'Result count:', len(result['data']))
 
@@ -123,6 +118,7 @@ cur_2 = db.con.cursor()
 cur_2.execute('SELECT * FROM mods')
 
 for row in cur_2:
+    # Iterate addons for addon files
     json_data = json.loads(row[5])
     url = f'/mods/{json_data["id"]}/files?'
 
