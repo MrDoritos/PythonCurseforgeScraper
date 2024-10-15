@@ -3,52 +3,27 @@
 import time
 import json
 import importlib
+import argparse
+import os
 
 sqlite_helper = importlib.import_module("sqlite_helper")
 api_helper = importlib.import_module("api_helper")
 config = importlib.import_module("config")
 
-db = sqlite_helper.Sqlite_helper(config.output_dir + '/curseforge.db')
-api = api_helper.Api_helper(db)
+db = sqlite_helper.Sqlite_helper(config.db_filepath, config.dry_run)
+api = api_helper.Api_helper(db, config)
 
-day = 86400
 hour = 3600
-week = 604800
+day = hour * 24 #86400
+week = day * 7 #604800
+month = week * 4 #2419200
 
-target_games = [432]
-target_categories = []
+target_games = config.game_filter
+target_categories = config.category_filter
 
-def when_last_request(url):
-    if not db.request_exists(url):
-        return 0
-    
-    db.cur.execute('SELECT time FROM api WHERE url=? ORDER BY time DESC', (url,))
-    return db.cur.fetchone()[0]
-
-def should_update_entries(url, time_diff):
-    req_time = when_last_request(url)
-    now_time = time.time()
-    res = req_time + time_diff < now_time
-    
-    debug = f'({req_time} + {time_diff} > {now_time})'
-
-    if res:
-        print("Updating entries for", url, debug)
-    else:
-        print("Not updating entries for", url, debug)
-
-    return res
-
-def read_time(stime):
-    try:
-        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
-    except:
-        return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
-
-if should_update_entries('/games', week):
-    for result in api_helper.Depaginator(api, '/games', use_local=False):
-        for game_stub in result['data']:
-            db.insert_game(game_stub)
+for result in api_helper.Depaginator(api, '/games', time_diff=week):
+    for game_stub in result['data']:
+        db.insert_game(game_stub)
 
 if len(target_games) == 0: 
     # Determine game list from db
@@ -58,10 +33,9 @@ if len(target_games) == 0:
 print("Target games:", target_games)
 
 for game_id in target_games:
-    if should_update_entries(f'/categories?gameId={game_id}', week):
-        for result in api_helper.Depaginator(api, f'/categories?gameId={game_id}', use_local=False):
-            for category_stub in result['data']:
-                db.insert_category(category_stub)
+    for result in api_helper.Depaginator(api, f'/categories?gameId={game_id}', time_diff=week):
+        for category_stub in result['data']:
+            db.insert_category(category_stub)
 
 if len(target_categories) == 0:
     # Determine category list from db
@@ -70,49 +44,51 @@ if len(target_categories) == 0:
 
 print("Target categories:", target_categories)
 
+db.save()
+exit(0)
+
 for category_id in target_categories:
     # Iterate category list
     db.cur.execute('SELECT gameId FROM categories WHERE id=?', (category_id,))
     game_id = db.cur.fetchone()[0]
     url = f'/mods/search?categoryId={category_id}&gameId={game_id}&sortField=3&sortOrder=desc'
 
-    depag = api_helper.Depaginator(api, url, use_local=False)
-    
-    if should_update_entries(depag.current_url, day):
-        # If results for category search results updated in the last day
-        for result in depag:
-            stale_count = 0
-            last_request = when_last_request(depag.current_url)
-            print(f'Last request for ({depag.current_url}): {last_request}')
+    depag = api_helper.Depaginator(api, url, time_diff=day)
 
-            for mod_stub in result['data']:
-                # Iterate search listing for addon ids
-                if not db.field_exists('mods', mod_stub['id']):
-                    db.insert_mod(mod_stub)
-                    continue
-                
-                db.cur.execute('SELECT json FROM mods WHERE id=?', (mod_stub['id'],))
-                stale_stub = json.loads(db.cur.fetchone()[0])
+    # If results for category search results updated in the last day
+    for result in depag:
+        stale_count = 0
+        last_request = api.when_last_request(depag.current_url)
+        print(f'Last request for ({depag.current_url}): {last_request}')
 
-                mod_date_json = mod_stub['dateModified']
-                stale_date_json = stale_stub['dateModified']
+        for mod_stub in result['data']:
+            # Iterate search listing for addon ids
+            if not db.field_exists('mods', mod_stub['id']):
+                db.insert_mod(mod_stub)
+                continue
+            
+            db.cur.execute('SELECT json FROM mods WHERE id=?', (mod_stub['id'],))
+            stale_stub = json.loads(db.cur.fetchone()[0])
 
-                mod_date = read_time(mod_date_json)
-                stale_date = read_time(stale_date_json)
+            mod_date_json = mod_stub['dateModified']
+            stale_date_json = stale_stub['dateModified']
 
-                if mod_date > stale_date:
-                    db.insert_mod(mod_stub)
-                    continue
+            mod_date = api.read_time(mod_date_json)
+            stale_date = api.read_time(stale_date_json)
 
-                stale_count += 1
+            if mod_date > stale_date:
+                db.insert_mod(mod_stub)
+                continue
 
-            print('Stale count:', stale_count, 'Result count:', len(result['data']))
+            stale_count += 1
 
-            if stale_count == len(result['data']):
-                print("All mods were stale, breaking")
-                break
+        print('Stale count:', stale_count, 'Result count:', len(result['data']))
 
-db.con.commit()
+        if stale_count == len(result['data']):
+            print("All mods were stale, breaking")
+            break
+
+db.save()
 
 cur_2 = db.con.cursor()
 cur_2.execute('SELECT * FROM mods')
@@ -124,8 +100,8 @@ for row in cur_2:
 
     depag = api_helper.Depaginator(api, url, use_local=False)
 
-    modify_time = read_time(json_data['dateModified'])
-    last_request = when_last_request(depag.current_url)
+    modify_time = api.read_time(json_data['dateModified'])
+    last_request = api.when_last_request(depag.current_url)
 
     if modify_time < last_request:
         print(f'{json_data["id"]}.', end='')
@@ -140,5 +116,5 @@ for row in cur_2:
 
 print("Done")
 
-db.con.commit()
+db.save()
 db.con.close()

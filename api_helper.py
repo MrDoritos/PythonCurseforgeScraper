@@ -6,15 +6,15 @@ import importlib
 import time
 import os
 
-sqlite_helper = importlib.import_module("sqlite_helper")
-config = importlib.import_module("config")
-
 class Api_helper:
-    def __init__(self, db_helper):
+    def __init__(self, db_helper, config):
         self.db = db_helper
-        self.api_key = self.get_api_key(config.api_key_file)
+        self.config = config
         self.api_url = config.api_url
-        self.last_request = time.time() - 1
+        self.api_key = config.api_key
+        self.wait_s = config.wait_ms / 1000.0
+        self.retry_limit = config.retry_limit
+        self.last_request = time.time() - self.wait_s
 
         self.client = requests.Session()
 
@@ -24,21 +24,14 @@ class Api_helper:
         self.client.headers.update({'x-api-key': self.api_key})
         self.client.headers.update({'Authorization': 'OAuth'})
         self.client.headers.update({'X-Twitch-Id': ''})
-
-    def get_api_key(self, file):
-        if not os.path.isfile(file):
-            raise Exception('API key file not found: ' + file)
-        
-        with open(file, 'r') as f:
-            return f.read().strip()
     
     def get_retry(self, url, retries=0):
         try:
             print('Making request to: ' + url, end=' ')
 
-            if (self.last_request + 1) > time.time():
-                ms = (self.last_request + 1) - time.time()
-                print('Waiting for ' + str(ms) + 'ms', end=' ')
+            if (self.last_request + self.wait_s) > time.time():
+                ms = (self.last_request + self.wait_s) - time.time()
+                print('Waiting for ' + format_ms(ms) + 'ms', end=' ')
                 time.sleep(ms)
 
             self.last_request = time.time()
@@ -47,7 +40,7 @@ class Api_helper:
             return r
         except:
             print('Request failed')
-            if retries > 4:
+            if retries > self.retry_limit:
                 raise
             print('Retrying request attempt: ' + str(retries + 1))
             return self.get_retry(url, retries + 1)
@@ -60,26 +53,69 @@ class Api_helper:
     def write_json(self, path, data: dict):
         self.write_file(path, json.dumps(data, indent=4))
 
-    def get_json(self, url, write=False, use_local=False):
-        if use_local and self.db.request_exists(url):
+    def get_json(self, url, write=False, use_local=False, time_diff=3600):
+        _cache = self.config.cache_option
+        _store = self.config.store_option
+
+        _use = (use_local and _cache == 'default') or _cache not in ['none','default']
+        _write = (write and _store == 'default') or _store not in ['none', 'default']
+
+        if _use and _cache != 'only':
+            _use = not self.should_update_entries(url, time_diff)
+
+        if _use:
             try:
-                print('Using local database: ' + url)
                 return json.loads(self.db.get_request(url))
             except Exception as e:
                 print('Failed to read local database: ' + url)
                 print(e)
-                pass    
+                pass
+
+        if _cache == 'only':
+            print("Cached requests only")
+            return None
 
         json_data = self.get_retry(url).json()
 
-        if write:
+        if _write:
             self.db.insert_request(url, json_data, self.last_request)
 
         return json_data
 
+    def when_last_request(self, url):
+        if not self.db.request_exists(url):
+            return 0
+        
+        self.db.cur.execute('SELECT time FROM api WHERE url=? ORDER BY time DESC', (url,))
+        return self.db.cur.fetchone()[0]
+
+    def should_update_entries(self, url, time_diff):
+        req_time = self.when_last_request(url)
+        now_time = time.time()
+        res = req_time + time_diff < now_time
+        leftover = (now_time - req_time) - time_diff
+        
+        debug = f'({req_time:.3f} + {time_diff:.3f} > {now_time:.3f}) = {leftover:.3f}'
+
+        if leftover > 0:
+            print("Stale entry", url, debug)
+        else:
+            print("Cached entry", url, debug)
+
+        return res
+
+    def format_ms(ms):
+        return f'{ms:.3f}'
+
+    def read_time(stime):
+        try:
+            return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
+        except:
+            return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
+
 
 class Depaginator:
-    def __init__(self, api, url, index=0, pageSize=50, write_local=True, use_local=True):
+    def __init__(self, api, url, index=0, pageSize=50, write_local=True, use_local=True, time_diff=3600):
         self.api = api
         self.url = url
         self.index = index
@@ -87,20 +123,24 @@ class Depaginator:
         self.page = None
         self.write_local = write_local
         self.use_local = use_local
+        self.time_diff = time_diff
 
         self.current_url = self.format_url()
     
     def format_url(self):
         append = f'index={self.index}&pageSize={self.pageSize}'
         self.current_url = self.url
-        if self.url[-1] == '?' or self.url[-1] == '&':
-            self.current_url = self.url + append #Remove first &
-        else:
-            self.current_url = self.url + '&' + append 
-        return self.current_url
+
+        if self.current_url[-1] not in '?&':
+            if '?' in self.current_url:
+                self.current_url += '&'
+            else:
+                self.current_url += '?'
+
+        return self.current_url + append
 
     def get_page(self):
-        return self.api.get_json(self.format_url(), self.write_local, self.use_local)
+        return self.api.get_json(self.format_url(), self.write_local, self.use_local, self.time_diff)
 
     def __iter__(self):
         return self
