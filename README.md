@@ -4,14 +4,21 @@
 
 ## Description
 
-Simple python script to scrape API data from curseforge.com, directly from the API. Outputs data to a sqlite3 database. Caches requests and follows rate limits.
+Python script for scraping API data from curseforge.com. Outputs API data to a sqlite database with another sqlite database for file storage. The program caches requests, follows rate limits, maintains historical data and captures everything.
 
 `python3 ./main.py --help`<br/>
 `./main.py --help`<br/>
 
-Default arguments are fully functional.
+Default arguments are fully functional although no CDN content is saved without `--download-all` (`-a`)
+
+## Scrape info
+
+There is an additional script for extracting miscellaneous information and url list.
+
+`python3 ./print_scrape_info.py`<br/>
+`./print_scrape_info.py`<br/>
 
 ## TO-DO
 
-* File storage of addon files and images into buckets or a folder structure. Minecraft alone will require 12TB or more, native deduplication is desirable.</br>
+* Minecraft alone will require 12TB or more, native deduplication and/or compression is desirable within the file bucket.</br>
 * Experimental interface for the archival audience
