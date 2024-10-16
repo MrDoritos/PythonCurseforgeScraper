@@ -3,13 +3,15 @@ import json
 
 class Sqlite_helper:
     def __init__(self, file, dry_run=False):
-        self.file = file
         self.dry_run = dry_run
-        self.con = sqlite3.connect(file)
-        self.cur = self.con.cursor()
+        
+        self.load(file)
+        self.init()
 
-        print("Connect to database: ", self.file)
+    def __del__(self):
+        self.close()
 
+    def init(self):
         self.cur.execute('CREATE TABLE IF NOT EXISTS games(id INTEGER PRIMARY KEY, name, slug, json)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name, slug, gameId, json)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS mods(id INTEGER PRIMARY KEY, name, slug, gameId, categoryIds, json)')
@@ -18,10 +20,28 @@ class Sqlite_helper:
 
         self.save()
 
+    def close(self):
+        self.save()
+        print("Close connection")
+        self.con.close()
+
+    def load(self, path=None):
+        if path is None:
+            path = self.file
+        else:
+            self.file = path
+
+        print("Connect to database: ", path)
+        self.con = sqlite3.connect(path)
+        self.cur = self.con.cursor()
+
     def save(self):
         if not self.dry_run:
             print("Commit to database: ", self.file)
-            self.con.commit()
+            try:
+                self.con.commit()
+            except Exception as e:
+                print("Failed to commit:", e)
 
     def request_exists(self, url:str):
         self.cur.execute('SELECT count(*) FROM api WHERE url=?', (url,))

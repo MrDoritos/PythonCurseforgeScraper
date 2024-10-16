@@ -31,7 +31,7 @@ class Api_helper:
 
             if (self.last_request + self.wait_s) > time.time():
                 ms = (self.last_request + self.wait_s) - time.time()
-                print('Waiting for ' + format_ms(ms) + 'ms', end=' ')
+                print('Waiting for ' + self.format_ms(ms) + 'ms', end=' ')
                 time.sleep(ms)
 
             self.last_request = time.time()
@@ -104,10 +104,10 @@ class Api_helper:
 
         return res
 
-    def format_ms(ms):
+    def format_ms(self, ms):
         return f'{ms:.3f}'
 
-    def read_time(stime):
+    def read_time(self, stime):
         try:
             return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
         except:

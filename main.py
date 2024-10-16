@@ -45,7 +45,6 @@ if len(target_categories) == 0:
 print("Target categories:", target_categories)
 
 db.save()
-exit(0)
 
 for category_id in target_categories:
     # Iterate category list
