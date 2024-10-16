@@ -16,6 +16,7 @@ wait_ms = 1000
 retry_limit = 4
 store_option = None
 cache_option = None
+full = False
 
 parser = argparse.ArgumentParser(
     prog="Python Curseforge Scraper",
@@ -37,6 +38,7 @@ parser.add_argument('-w', '--wait-ms', type=float, default=wait_ms, dest='w', he
 parser.add_argument('-r', '--retry-limit', type=int, default=retry_limit, dest='r', help='number of retries for a failed request')
 parser.add_argument('-s', '--store-option', default='default', choices=['none', 'default', 'all', 'last'], dest='store', help='request storage usage')
 parser.add_argument('-c', '--cache-option', default='default', choices=['none', 'default', 'all', 'only'], dest='cache', help='request cache usage')
+parser.add_argument('-f', '--full', action='store_true', dest='f', help='Enable when the final numbers show any discrepancies')
 
 args = parser.parse_args()
 
@@ -54,6 +56,7 @@ wait_ms = args.w
 retry_limit = args.r
 store_option = args.store
 cache_option = args.cache
+full = args.f
 
 # Stateful
 

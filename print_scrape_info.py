@@ -151,7 +151,7 @@ def save_file_urls():
             file_url_count += 1
             file_url_size += json_data["fileLength"]
 
-            file_url_dump.write(f'{json_data["id"]},{json_data["downloadUrl"]}\n')
+            file_url_dump.write(f'{json_data["id"]},{json_data["fileLength"]},{json_data["downloadUrl"]}\n')
 
     print(f"File download URL count: {file_url_count} ({sizeof_fmt(file_url_size)})")
     scrape_info_dump.write(f"\nFile download URL count: {file_url_count} ({sizeof_fmt(file_url_size)})")

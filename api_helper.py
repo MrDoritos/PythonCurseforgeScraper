@@ -27,11 +27,11 @@ class Api_helper:
     
     def get_retry(self, url, retries=0):
         try:
-            print('Making request to: ' + url, end=' ')
+            print('Making request to: ' + url, end=' ', flush=True)
 
             if (self.last_request + self.wait_s) > time.time():
                 ms = (self.last_request + self.wait_s) - time.time()
-                print('Waiting for ' + self.format_ms(ms) + 'ms', end=' ')
+                print('Waiting for ' + self.format_ms(ms) + 'ms', end=' ', flush=True)
                 time.sleep(ms)
 
             self.last_request = time.time()
@@ -111,7 +111,10 @@ class Api_helper:
         try:
             return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%S.%fZ'))
         except:
-            return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
+            try:
+                return time.mktime(time.strptime(stime, '%Y-%m-%dT%H:%M:%SZ'))
+            except:
+                return 0
 
 
 class Depaginator:
@@ -129,18 +132,19 @@ class Depaginator:
     
     def format_url(self):
         append = f'index={self.index}&pageSize={self.pageSize}'
-        self.current_url = self.url
+        current_url = self.url
 
-        if self.current_url[-1] not in '?&':
-            if '?' in self.current_url:
-                self.current_url += '&'
+        if current_url[-1] not in '?&':
+            if '?' in current_url:
+                current_url += '&'
             else:
-                self.current_url += '?'
+                current_url += '?'
 
-        return self.current_url + append
+        return current_url + append
 
     def get_page(self):
-        return self.api.get_json(self.format_url(), self.write_local, self.use_local, self.time_diff)
+        self.current_url = self.format_url()
+        return self.api.get_json(self.current_url, self.write_local, self.use_local, self.time_diff)
 
     def __iter__(self):
         return self
