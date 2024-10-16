@@ -32,6 +32,11 @@ def retrieve_games():
         db.cur.execute('SELECT DISTINCT gameId FROM categories')
         target_games = [x[0] for x in db.cur.fetchall()]
 
+def iterate_games():
+    if config.scrape_game_versions:
+        for game_id in target_games:
+            api.get_json(f'/games/{game_id}/versions', write=True, use_local=True, time_diff=month)
+
 def retrieve_categories():
     global target_categories
     for game_id in target_games:
@@ -86,6 +91,8 @@ def iterate_mods():
     cur_2 = db.con.cursor()
     cur_2.execute('SELECT * FROM mods')
 
+    modifications = 0
+
     for row in cur_2:
         # Iterate addons for addon files
         json_data = json.loads(row[5])
@@ -96,9 +103,12 @@ def iterate_mods():
         modify_time = api.read_time(json_data['dateModified'])
         last_request = api.when_last_request(depag.current_url)
 
-        if modify_time < last_request:
+        if modify_time < last_request and not config.full:
             print(f'{json_data["id"]}.', end='', flush=True)
             continue
+
+        if config.scrape_descriptions:
+            api.get_json(f'/mods/{json_data["id"]}/description', write=True, use_local=True, time_diff=week)
 
         print(f'Updating files for {json_data["slug"]} ({json_data["id"]}) ({modify_time} >= {last_request})')
 
@@ -106,7 +116,14 @@ def iterate_mods():
             for file_stub in result['data']:
                 db.insert_file(file_stub)
 
-        db.save()
+                if config.scrape_changelogs:
+                    api.get_json(f'/mods/{json_data["id"]}/files/{file_stub["id"]}/changelog', write=True, use_local=True, time_diff=week)
+
+        modifications += 1
+
+        if modifications > 20:
+            db.save()
+            modifications = 0
 
 retrieve_games()
 retrieve_categories()
@@ -114,6 +131,7 @@ print("Target games:", target_games)
 print("Target categories:", target_categories)
 db.save()
 
+iterate_games()
 iterate_categories()
 db.save()
 

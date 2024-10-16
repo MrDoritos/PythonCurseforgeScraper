@@ -31,13 +31,13 @@ class Sqlite_helper:
         else:
             self.file = path
 
-        print("Connect to database: ", path)
+        print("Connect to database:", path)
         self.con = sqlite3.connect(path)
         self.cur = self.con.cursor()
 
     def save(self):
         if not self.dry_run:
-            print("Commit to database: ", self.file)
+            print("Commit to database:", self.file)
             try:
                 self.con.commit()
             except Exception as e:

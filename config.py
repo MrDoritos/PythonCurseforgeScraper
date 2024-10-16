@@ -17,6 +17,9 @@ retry_limit = 4
 store_option = None
 cache_option = None
 full = False
+scrape_descriptions = False
+scrape_changelogs = False
+scrape_game_versions = False
 
 parser = argparse.ArgumentParser(
     prog="Python Curseforge Scraper",
@@ -39,6 +42,9 @@ parser.add_argument('-r', '--retry-limit', type=int, default=retry_limit, dest='
 parser.add_argument('-s', '--store-option', default='default', choices=['none', 'default', 'all', 'last'], dest='store', help='request storage usage')
 parser.add_argument('-c', '--cache-option', default='default', choices=['none', 'default', 'all', 'only'], dest='cache', help='request cache usage')
 parser.add_argument('-f', '--full', action='store_true', dest='f', help='Enable when the final numbers show any discrepancies')
+parser.add_argument('--scrape-descriptions', action='store_true', dest='sd', help='Scrape descriptions for each mod')
+parser.add_argument('--scrape-changelogs', action='store_true', dest='sc', help='Scrape changelogs for each file')
+parser.add_argument('--scrape-game-versions', action='store_true', dest='sgv', help='Scrape versions for each game')
 
 args = parser.parse_args()
 
@@ -57,6 +63,9 @@ retry_limit = args.r
 store_option = args.store
 cache_option = args.cache
 full = args.f
+scrape_descriptions = args.sd
+scrape_changelogs = args.sc
+scrape_game_versions = args.sgv
 
 # Stateful
 
