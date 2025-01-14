@@ -12,7 +12,7 @@ import threading
 sqlite_helper = importlib.import_module("sqlite_helper")
 api_helper = importlib.import_module("api_helper")
 config = importlib.import_module("config")
-file_bucket = importlib.import_module("file_bucket")
+file_bucket = importlib.import_module(config.bucket_module)
 
 db = sqlite_helper.Sqlite_helper(config.db_filepath, config.dry_run)
 bucket = file_bucket.Filebucket(config.bucket_filepath, config.dry_run)

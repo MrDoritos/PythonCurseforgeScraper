@@ -13,10 +13,12 @@ db_filename = 'curseforge.db'
 db_filepath = ':memory:'
 bucket_filename = 'bucket.db'
 bucket_filepath = ':memory:'
+bucket_module = 'file_bucket'
 category_filter = []
 game_filter = [432]
 wait_ms = 1000
 retry_limit = 4
+threshold = 1
 store_option = None
 cache_option = None
 full = False
@@ -26,6 +28,9 @@ scrape_game_versions = False
 download_media = False
 download_files = False
 download_all = False
+singleton = True
+pid_file = 'curse.pid'
+pid_arg = None
 
 parser = argparse.ArgumentParser(
     prog="Python Curseforge Scraper",
@@ -43,11 +48,12 @@ parser.add_argument('-df', '--database-filename', default=db_filename, dest='dbf
 parser.add_argument('-dp', '--database-filepath', dest='dbfp', help='full path to database connection, ignores database filename option')
 parser.add_argument('-bf', '--bucket-filename', default=bucket_filename, dest='bf', help='filebucket connection filename')
 parser.add_argument('-bp', '--bucket-filepath', dest='bfp', help='full path to filebucket connection, ignores bucket filename option')
+parser.add_argument('-bm', '--bucket-module', default=bucket_module, dest='bm', help='filebucket python module override')
 parser.add_argument('-cf', '--category-filter', type=int, default=category_filter, action='extend', nargs='+', dest='cf', help='category ids to collect')
 parser.add_argument('-gf', '--game-filter', type=int, default=game_filter, action='extend', nargs='+', dest='gf', help='game ids to collect')
 parser.add_argument('-w', '--wait-ms', type=float, default=wait_ms, dest='w', help='wait time between requests in milliseconds')
 parser.add_argument('-r', '--retry-limit', type=int, default=retry_limit, dest='r', help='number of retries for a failed request')
-parser.add_argument('-t', '--stale-threshold', type=int, default=1, dest='threshold', help='Number of consecutive pages of stale data before leaving the current loop')
+parser.add_argument('-t', '--stale-threshold', type=int, default=threshold, dest='threshold', help='Number of consecutive pages of stale data before leaving the current loop')
 parser.add_argument('-s', '--store-option', default='default', choices=['none', 'default', 'all', 'last'], dest='store', help='request storage usage')
 parser.add_argument('-c', '--cache-option', default='default', choices=['none', 'default', 'all', 'only'], dest='cache', help='request cache usage')
 parser.add_argument('-f', '--full', action='store_true', dest='f', help='Enable when the final numbers show any discrepancies')
@@ -58,7 +64,7 @@ parser.add_argument('--download-media', action='store_true', dest='dm', help='Do
 parser.add_argument('--download-files', action='store_true', dest='df', help='Download files')
 parser.add_argument('-a', '--download-all', action='store_true', dest='da', help='Download and scrape everything')
 parser.add_argument('-C', '--curl', dest='curl', help='wrapper to use api key with curl')
-parser.add_argument('-pf', '--pid-file', default='curse.pid', dest='pid_file', help='Read/write program pid at this file')
+parser.add_argument('-pf', '--pid-file', default=pid_file, dest='pid_file', help='Read/write program pid at this file')
 parser.add_argument('-p', '--pid', dest='pid', help="Use this pid for the singleton check")
 parser.add_argument('--singleton', action='store_true', default=True, dest='singleton', help='Force single instance using pid')
 
@@ -75,8 +81,10 @@ category_filter = args.cf
 game_filter = args.gf
 db_filename = args.dbf
 bucket_filename = args.bf
+bucket_module = args.bm
 wait_ms = args.w
 retry_limit = args.r
+threshold = args.threshold
 store_option = args.store
 cache_option = args.cache
 full = args.f
@@ -89,35 +97,47 @@ download_all = args.da
 pid_file = args.pid_file
 pid_arg = args.pid
 singleton = args.singleton
-threshold = args.threshold
 
 # Stateful
 
 def pid_check(pid):
     try:
-        os.kill(pid, 0)
+        os.kill(int(pid), 0)
     except OSError:
         return False
     else:
         return True
+
+class CleanPid():
+    def __init__(self):
+        pass
+
+    def __del__(self):
+        if pid_file and len(pid_file) and os.path.exists(pid_file):
+            os.remove(pid_file)
+
+__cleanpid = None
 
 if singleton:
     if not (pid_arg and len(pid_arg)) and not (pid_file and len(pid_file)):
             print('No pid supplied, unsafe circumstances or remove the singleton flag')
     
     if (pid_arg and len(pid_arg) and pid_check(pid_arg)):
-        print('Program is already running. Pid from pid arg')
+        print(f'Program is already running. Pid {pid_arg} from pid arg')
         exit(1)
 
-    if (pid_file and len(pid_file) and os.path.isfile(pid_file)):
-        pid = open(pid_file).read().strip()
-        if pid_check(pid):
-            print('Program is already running. Pid from pid_file arg')
-            exit(1)
-            
+    if pid_file and len(pid_file):
+        if os.path.exists(pid_file):
+            pid = open(pid_file).read().strip()
+            if pid_check(pid):
+                print(f'Program is already running. Pid {pid} from pid_file arg')
+                exit(1)
+
         # write current pid
         with open(pid_file, 'w') as f:
             f.write(str(os.getpid()))
+
+            __cleanpid = CleanPid()
 
 
 if not (api_key and len(api_key)):
