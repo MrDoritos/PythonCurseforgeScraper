@@ -8,6 +8,7 @@ import datetime
 
 sqlh = importlib.import_module("sqlite_helper")
 config = importlib.import_module("config")
+fileh = importlib.import_module("file_bucket")
 
 def sizeof_fmt(num, suffix="B"):
     for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
@@ -24,6 +25,7 @@ if not os.path.isfile(config.db_filepath):
     exit(1)
 
 db = sqlh.Sqlite_helper(config.db_filepath, dry_run=True)
+file_bucket = fileh.Filebucket(config.bucket_filepath, dry_run=True)
 
 slug_counts = dict()
 slug_files = dict()
@@ -131,8 +133,18 @@ def approximate_file_count():
             api_entry_count += 1
             ideal_file_count += len(json_data['data'])
 
-    print("Theoretical file count:", ideal_file_count, "API entry count:", api_entry_count)
-    scrape_info_dump.write(f"\nTheoretical file count: {ideal_file_count} API entry count: {api_entry_count}")
+    print("Theoretical file count (JSON data of all API calls):", ideal_file_count)
+    print("API entry count (URL search of all API calls):", api_entry_count)
+    scrape_info_dump.write(f"\nTheoretical file count (JSON data of all API calls): {ideal_file_count}")
+    scrape_info_dump.write(f"\nAPI entry count (URL search of all API calls): {api_entry_count}")
+
+    if os.path.isfile(config.bucket_filepath):
+        file_bucket.cur.execute("SELECT COUNT(*) FROM files")
+
+        download_count = file_bucket.cur.fetchone()[0]
+
+        print("File count within the bucket:", download_count)
+        scrape_info_dump.write(f"\nFile count within the bucket:{download_count}")
 
 def save_file_urls():
     # Save file urls to a download list
@@ -213,5 +225,7 @@ save_primary_categories()
 approximate_file_count()
 save_file_urls()
 save_all_urls()
+
+scrape_info_dump.write('\n')
 
 print("Done")

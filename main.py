@@ -5,6 +5,9 @@ import json
 import importlib
 import argparse
 import os
+import signal
+import sys
+import threading
 
 sqlite_helper = importlib.import_module("sqlite_helper")
 api_helper = importlib.import_module("api_helper")
@@ -19,15 +22,23 @@ hour = 3600
 day = hour * 24 #86400
 week = day * 7 #604800
 month = week * 4 #2419200
+half_year = week * 26
+year = week * 52
 
 target_games = config.game_filter
 target_categories = config.category_filter
+
+interrupt_loop = False
+busy_lock = threading.Lock()
 
 def retrieve_games():
     global target_games
     append = len(target_games) == 0
     for result in api_helper.Depaginator(api, '/games', time_diff=week):
         for game_stub in result['data']:
+            if interrupt_loop:
+                return
+            
             db.insert_game(game_stub)
 
             if config.download_media:
@@ -43,6 +54,9 @@ def retrieve_games():
 
 def iterate_games():
     for game_id in target_games:
+        if interrupt_loop:
+            return
+
         if config.scrape_game_versions:
             api.get_json(f'/games/{game_id}/versions', write=True, use_local=True, time_diff=month)
 
@@ -52,6 +66,9 @@ def retrieve_categories():
     for game_id in target_games:
         for result in api_helper.Depaginator(api, f'/categories?gameId={game_id}', time_diff=week):
             for category_stub in result['data']:
+                if interrupt_loop:
+                    return
+
                 db.insert_category(category_stub)
 
                 if config.download_media:
@@ -67,12 +84,16 @@ def iterate_categories():
         db.cur.execute('SELECT gameId FROM categories WHERE id=?', (category_id,))
         game_id = db.cur.fetchone()[0]
         url = f'/mods/search?categoryId={category_id}&gameId={game_id}&sortField=3&sortOrder=desc'
-
-        # If results for category search results updated in the last day
+        stale_threshold = 0
+        
+        # Stale in a day or less
         for result in api_helper.Depaginator(api, url, time_diff=day):
             stale_count = 0
 
             for mod_stub in result['data']:
+                if interrupt_loop:
+                    return
+                
                 # Iterate search listing for addon ids
                 if not db.field_exists('mods', mod_stub['id']):
                     db.insert_mod(mod_stub)
@@ -93,11 +114,14 @@ def iterate_categories():
 
                 stale_count += 1
 
-            print('Stale count:', stale_count, 'Result count:', len(result['data']))
+            print('Stale count:', stale_count, 'Result count:', len(result['data']), 'Threshold:', stale_threshold)
 
             if stale_count == len(result['data']) and not config.full:
-                print("All mods were stale, breaking")
-                break
+                if stale_threshold > 1:
+                    print("All mods were stale, breaking")
+                    break
+                else:
+                    stale_threshold += 1
 
 def iterate_mods():
     cur_2 = db.con.cursor()
@@ -106,6 +130,8 @@ def iterate_mods():
     modifications = 0
 
     for row in cur_2:
+        if interrupt_loop:
+            return
         # Iterate addons for addon files
         json_data = json.loads(row[5])
         url = f'/mods/{json_data["id"]}/files?'
@@ -160,17 +186,47 @@ def iterate_mods():
             db.save()
             modifications = 0
 
-retrieve_games()
-retrieve_categories()
-print("Target games:", target_games)
-print("Target categories:", target_categories)
-db.save()
+# could be improved
 
-iterate_games()
-iterate_categories()
-db.save()
+def signal_handler(sig, frame):
+    global interrupt_loop, busy_lock
+    print("Caught kill signal, interrupting loop")
+    interrupt_loop = True
+    with busy_lock: #this way the resources are frozen until we exit safely
+        print("Saving progress, releasing held resources, and exiting")
+        db.close()
+        bucket.close()
+        sys.exit(0)
 
-iterate_mods()
-db.save()
+signal.signal((signal.SIGINT, signal.SIGTERM), signal_handler)
 
-print("Done")
+with busy_lock:
+    retrieve_games()
+
+with busy_lock:
+    retrieve_categories()
+
+with busy_lock:
+    print("Target games:", target_games)
+    print("Target categories:", target_categories)
+
+with busy_lock:
+    db.save()
+
+with busy_lock:
+    iterate_games()
+
+with busy_lock:
+    iterate_categories()
+
+with busy_lock:
+    db.save()
+
+with busy_lock:
+    iterate_mods()
+
+with busy_lock:
+    db.save()
+
+with busy_lock:
+    print("Done")
