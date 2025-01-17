@@ -8,6 +8,8 @@ import os
 import signal
 import sys
 import threading
+import sqlite3
+import re
 
 sqlite_helper = importlib.import_module("sqlite_helper")
 api_helper = importlib.import_module("api_helper")
@@ -123,27 +125,74 @@ def iterate_categories():
                 else:
                     stale_threshold += 1
 
+def ismodurl(url):
+    reg = re.compile('^/mods/[0-9]+.*')
+    return reg.search(url) is not None
+
+def getmodid(url):
+    reg = re.compile('^/mods/([0-9]+)')
+    return reg.search(url).group(1)
+
+def getmodtime(json_raw):
+    j = json.loads(json_raw)
+    return api.read_time(j['dateModified'])
+
 def iterate_mods():
+    db.con.create_function('ISMODURL', 1, ismodurl)
+    db.con.create_function('GETMODID', 1, getmodid)
+    db.con.create_function('GETMODTIME', 1, getmodtime)
+    
     cur_2 = db.con.cursor()
-    cur_2.execute('SELECT * FROM mods')
-
     modifications = 0
+    old_check = False
 
+    # accumulate all mods that require a fetch
+    cur_2.execute("ATTACH DATABASE ':memory:' AS dbtemp")
+    cur_2.execute("CREATE TABLE dbtemp.api_calls(url,time,json)")
+    cur_2.execute("CREATE TABLE dbtemp.stale_mods(id INTEGER PRIMARY KEY,name,slug,gameId,json,upstream_time,downstream_time)")
+
+    print("Extracting most recent API calls")
+    cur_2.execute("INSERT INTO dbtemp.api_calls SELECT * FROM (SELECT * FROM (SELECT GETMODID(url) AS 'url',time,'' AS 'json' FROM api WHERE ISMODURL(url)) GROUP BY url HAVING MAX(time))")
+
+    print("Generating list of out-of-date mods")
+    cur_2.execute('INSERT INTO dbtemp.stale_mods SELECT * FROM (SELECT mods.id,mods.name,mods.slug,mods.gameId,mods.json,GETMODTIME(mods.json),dbtemp.api_calls.time FROM mods INNER JOIN dbtemp.api_calls ON dbtemp.api_calls.url=mods.id WHERE GETMODTIME(mods.json) > dbtemp.api_calls.time)')
+    
+    cur_2.execute('SELECT COUNT(*) FROM dbtemp.stale_mods')
+    print(f'Fetching {cur_2.fetchone()[0]} mods')
+
+    cur_2.execute('SELECT * FROM dbtemp.stale_mods')
     for row in cur_2:
         if interrupt_loop:
             return
-        # Iterate addons for addon files
-        json_data = json.loads(row[5])
-        url = f'/mods/{json_data["id"]}/files?'
+        
+        json_data = None
+        url = None
+        modify_time = None
+        last_request = None
+        depag = None
 
-        depag = api_helper.Depaginator(api, url, use_local=False)
+        if old_check:
+            # Iterate addons for addon files
+            json_data = json.loads(row[5])
+            url = f'/mods/{json_data["id"]}/files?'
+            depag = api_helper.Depaginator(api, url, use_local=False)
 
-        modify_time = api.read_time(json_data['dateModified'])
-        last_request = api.when_last_request(depag.current_url)
+            modify_time = api.read_time(json_data['dateModified'])
+            last_request = api.when_last_request(depag.current_url)
 
-        if modify_time < last_request and not config.full:
-            print(f'{json_data["id"]}.', end='', flush=True)
-            continue
+            if modify_time < last_request and not config.full:
+                print(f'{json_data["id"]}.', end='', flush=True)
+                continue
+        else:
+            db.cur.execute('SELECT * FROM mods WHERE id=? LIMIT 1', (row[0],))
+            _r = db.cur.fetchone()
+            json_data = json.loads(_r[5])
+            url = f'/mods/{json_data["id"]}/files?'
+            depag = api_helper.Depaginator(api, url, use_local=False)
+
+            modify_time = api.read_time(json_data['dateModified'])
+            last_request = api.when_last_request(depag.current_url)
+
 
         if config.scrape_descriptions:
             api.get_json(f'/mods/{json_data["id"]}/description', write=True, use_local=True, time_diff=week)
@@ -167,7 +216,7 @@ def iterate_mods():
                     bucket.try_insert_url(screenshot['url'], modify_time, None, screenshot['id'], None)
                     bucket.try_insert_url(screenshot['thumbnailUrl'], modify_time, None, screenshot['id'], None)
 
-        print(f'Updating files for {json_data["slug"]} ({json_data["id"]}) ({modify_time} >= {last_request})')
+        print(f'Updating files for {json_data["slug"]} ({json_data["id"]}) ({modify_time} >= {last_request} (up/down) ({last_request - modify_time}))')
 
         for result in depag:
             for file_stub in result['data']:
@@ -203,32 +252,48 @@ for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
     signal.signal(sig, signal_handler)
 
 with busy_lock:
-    retrieve_games()
+    if 'game_retrieve' not in config.skip:
+        print('Game Retrieval')
+        retrieve_games()
 
 with busy_lock:
-    retrieve_categories()
+    if 'category_retrieve' not in config.skip:
+        print('Category Retrieval')
+        retrieve_categories()
 
 with busy_lock:
     print("Target games:", target_games)
     print("Target categories:", target_categories)
 
 with busy_lock:
-    db.save()
+    if not config.dry_run:
+        print('Save Progress')
+        db.save()
 
 with busy_lock:
-    iterate_games()
+    if 'game_iterate' not in config.skip:
+        print('Game Iteration')
+        iterate_games()
 
 with busy_lock:
-    iterate_categories()
+    if 'category_iterate' not in config.skip:
+        print('Category Iteration')
+        iterate_categories()
 
 with busy_lock:
-    db.save()
+    if not config.dry_run:
+        print('Save Progress')
+        db.save()
 
 with busy_lock:
-    iterate_mods()
+    if 'mod_iterate' not in config.skip:
+        print('Mod Iteration')
+        iterate_mods()
 
 with busy_lock:
-    db.save()
+    if not config.dry_run:
+        print('Save Progress')
+        db.save()
 
 with busy_lock:
     print("Done")

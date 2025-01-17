@@ -86,7 +86,7 @@ class Api_helper:
         if not self.db.request_exists(url):
             return 0
         
-        self.db.cur.execute('SELECT time FROM api WHERE url=? ORDER BY time DESC', (url,))
+        self.db.cur.execute('SELECT * FROM (SELECT time FROM api WHERE url=?) ORDER BY time DESC LIMIT 1', (url,))
         return self.db.cur.fetchone()[0]
 
     def should_update_entries(self, url, time_diff):

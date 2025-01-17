@@ -25,12 +25,16 @@ full = False
 scrape_descriptions = False
 scrape_changelogs = False
 scrape_game_versions = False
+scrape_all = False
 download_media = False
 download_files = False
 download_all = False
 singleton = True
 pid_file = 'curse.pid'
 pid_arg = None
+skip = []
+
+skippable = ['game_retrieve', 'game_iterate', 'category_retrieve', 'category_iterate', 'mod_iterate']
 
 parser = argparse.ArgumentParser(
     prog="Python Curseforge Scraper",
@@ -60,6 +64,7 @@ parser.add_argument('-f', '--full', action='store_true', dest='f', help='Enable 
 parser.add_argument('--scrape-descriptions', action='store_true', dest='sd', help='Scrape descriptions for each mod')
 parser.add_argument('--scrape-changelogs', action='store_true', dest='sc', help='Scrape changelogs for each file')
 parser.add_argument('--scrape-game-versions', action='store_true', dest='sgv', help='Scrape versions for each game')
+parser.add_argument('--scrape-all', action='store_true', dest='scrape_all', help='Shorthand for all scrape flags')
 parser.add_argument('--download-media', action='store_true', dest='dm', help='Download media/logo/image files for everything')
 parser.add_argument('--download-files', action='store_true', dest='df', help='Download files')
 parser.add_argument('-a', '--download-all', action='store_true', dest='da', help='Download and scrape everything')
@@ -67,6 +72,7 @@ parser.add_argument('-C', '--curl', dest='curl', help='wrapper to use api key wi
 parser.add_argument('-pf', '--pid-file', default=pid_file, dest='pid_file', help='Read/write program pid at this file')
 parser.add_argument('-p', '--pid', dest='pid', help="Use this pid for the singleton check")
 parser.add_argument('--singleton', action='store_true', default=True, dest='singleton', help='Force single instance using pid')
+parser.add_argument('--skip', default=skip, action='extend', nargs='+', choices=skippable, dest='skip', help='Skip individual scrape processes')
 
 args = parser.parse_args()
 
@@ -91,12 +97,14 @@ full = args.f
 scrape_descriptions = args.sd
 scrape_changelogs = args.sc
 scrape_game_versions = args.sgv
+scrape_all = args.scrape_all
 download_media = args.dm
 download_files = args.df
 download_all = args.da
 pid_file = args.pid_file
 pid_arg = args.pid
 singleton = args.singleton
+skip = args.skip
 
 # Stateful
 
@@ -160,7 +168,12 @@ if not args.dbfp:
 
 if not args.bfp:
     bucket_filepath = output_dir + '/' + bucket_filename
-    
+
+if scrape_all:
+    scrape_descriptions = True
+    scrape_changelogs = True
+    scrape_game_versions = True
+
 if download_all:
     scrape_descriptions = True
     scrape_changelogs = True

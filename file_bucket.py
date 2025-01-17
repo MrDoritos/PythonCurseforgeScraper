@@ -21,8 +21,6 @@ class Filebucket:
         self.cur.execute("CREATE TABLE IF NOT EXISTS files(hash, length, filename, time, data)")
         self.cur.execute("CREATE TABLE IF NOT EXISTS api(url, id, filename, time, hash)")
 
-        self.save()
-
     def close(self):
         self.save()
         print("Close bucket")

@@ -18,8 +18,6 @@ class Sqlite_helper:
         self.cur.execute('CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY, displayName, fileName, gameId, modId, json)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS api(url, time, json)')
 
-        self.save()
-
     def close(self):
         self.save()
         print("Close connection")
@@ -32,8 +30,10 @@ class Sqlite_helper:
             self.file = path
 
         print("Connect to database:", path)
-        self.con = sqlite3.connect(path)
+        self.con = sqlite3.connect(path, isolation_level='EXCLUSIVE')
         self.cur = self.con.cursor()
+        self.cur.execute('PRAGMA SYNCHRONOUS = 0')
+        self.cur.execute('PRAGMA journal_mode = OFF')
 
     def save(self):
         if not self.dry_run:
@@ -44,22 +44,22 @@ class Sqlite_helper:
                 print("Failed to commit:", e)
 
     def request_exists(self, url:str):
-        self.cur.execute('SELECT count(*) FROM api WHERE url=?', (url,))
+        self.cur.execute('SELECT count(*) FROM api WHERE url=? LIMIT 1', (url,))
         return self.cur.fetchone()[0] > 0
 
     def insert_request(self, url:str, json_data:str, time):
         self.cur.execute('INSERT OR REPLACE INTO api(url, json, time) VALUES(?,?,?)', (url, json.dumps(json_data), time))
 
     def get_request(self, url:str):
-        self.cur.execute('SELECT json FROM api WHERE url=? ORDER BY time', (url,))
+        self.cur.execute('SELECT json FROM api WHERE url=? ORDER BY time LIMIT 1', (url,))
         return self.cur.fetchone()[0]
     
     def table_exists(self, table:str):
-        self.cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        self.cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,))
         return self.cur.fetchone()[0] > 0
 
     def field_exists(self, table:str, id:int):
-        self.cur.execute(f'SELECT count(*) FROM {table} WHERE id=?', (id,))
+        self.cur.execute(f'SELECT count(*) FROM {table} WHERE id=? LIMIT 1', (id,))
         return self.cur.fetchone()[0] > 0
 
     def insert_category(self, category:dict):
