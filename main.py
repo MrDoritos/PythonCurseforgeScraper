@@ -29,7 +29,7 @@ target_games = config.game_filter
 target_categories = config.category_filter
 
 interrupt_loop = False
-busy_lock = threading.Lock()
+busy_lock = threading.RLock() # signals interrupt main thread, use reentrant
 
 def retrieve_games():
     global target_games
@@ -194,11 +194,13 @@ def signal_handler(sig, frame):
     interrupt_loop = True
     with busy_lock: #this way the resources are frozen until we exit safely
         print("Saving progress, releasing held resources, and exiting")
-        db.close()
-        bucket.close()
+        # Currently these actions are implied
+        # db.close()
+        # bucket.close()
         sys.exit(0)
 
-signal.signal((signal.SIGINT, signal.SIGTERM), signal_handler)
+for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
+    signal.signal(sig, signal_handler)
 
 with busy_lock:
     retrieve_games()

@@ -114,6 +114,7 @@ class CleanPid():
 
     def __del__(self):
         if pid_file and len(pid_file) and os.path.exists(pid_file):
+            print("Clearing pid file lock")
             os.remove(pid_file)
 
 __cleanpid = None
