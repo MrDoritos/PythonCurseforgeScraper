@@ -30,10 +30,8 @@ class Sqlite_helper:
             self.file = path
 
         print("Connect to database:", path)
-        self.con = sqlite3.connect(path, isolation_level='EXCLUSIVE')
+        self.con = sqlite3.connect(path)
         self.cur = self.con.cursor()
-        self.cur.execute('PRAGMA SYNCHRONOUS = 0')
-        self.cur.execute('PRAGMA journal_mode = OFF')
 
     def save(self):
         if not self.dry_run:
