@@ -53,8 +53,8 @@ parser.add_argument('-dp', '--database-filepath', dest='dbfp', help='full path t
 parser.add_argument('-bf', '--bucket-filename', default=bucket_filename, dest='bf', help='filebucket connection filename')
 parser.add_argument('-bp', '--bucket-filepath', dest='bfp', help='full path to filebucket connection, ignores bucket filename option')
 parser.add_argument('-bm', '--bucket-module', default=bucket_module, dest='bm', help='filebucket python module override')
-parser.add_argument('-cf', '--category-filter', type=int, default=category_filter, action='extend', nargs='+', dest='cf', help='category ids to collect')
-parser.add_argument('-gf', '--game-filter', type=int, default=game_filter, action='extend', nargs='+', dest='gf', help='game ids to collect')
+parser.add_argument('-cf', '--category-filter', type=int, default=None, action='extend', nargs='*', dest='cf', help='category ids to collect')
+parser.add_argument('-gf', '--game-filter', type=int, default=None, action='extend', nargs='*', dest='gf', help='game ids to collect')
 parser.add_argument('-w', '--wait-ms', type=float, default=wait_ms, dest='w', help='wait time between requests in milliseconds')
 parser.add_argument('-r', '--retry-limit', type=int, default=retry_limit, dest='r', help='number of retries for a failed request')
 parser.add_argument('-t', '--stale-threshold', type=int, default=threshold, dest='threshold', help='Number of consecutive pages of stale data before leaving the current loop')
@@ -83,8 +83,8 @@ api_url = args.u
 api_key_file = args.kf
 api_key = args.k
 dry_run = args.n
-category_filter = args.cf
-game_filter = args.gf
+category_filter = category_filter if args.cf is None else args.cf
+game_filter = game_filter if args.gf is None else args.gf
 db_filename = args.dbf
 bucket_filename = args.bf
 bucket_module = args.bm

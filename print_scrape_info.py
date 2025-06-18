@@ -6,9 +6,9 @@ import importlib
 import os
 import datetime
 
-sqlh = importlib.import_module("sqlite_helper")
-config = importlib.import_module("config")
-fileh = importlib.import_module("file_bucket")
+import sqlite_helper as sqlh
+import file_bucket as fileh
+import config
 
 def sizeof_fmt(num, suffix="B"):
     for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):

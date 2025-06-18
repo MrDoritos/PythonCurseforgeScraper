@@ -6,8 +6,8 @@ import importlib
 import os
 import datetime
 
-sqlh = importlib.import_module("sqlite_helper")
-config = importlib.import_module("config")
+import config
+import sqlite_helper as sqlh
 
 db = sqlh.Sqlite_helper(config.db_filepath, dry_run=True)
 dbcur = db.con.cursor()

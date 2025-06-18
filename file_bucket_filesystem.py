@@ -7,8 +7,8 @@ from urllib.parse import urlparse
 import urllib.request
 import importlib
 
-Filebucket_module = importlib.import_module("file_bucket")
-Filebucket = Filebucket_module.Filebucket
+import file_bucket as Filebucket_module
+from file_bucket import Filebucket
 
 class Filebucket(Filebucket_module.Filebucket):
     def exists_filesystem_path(self, path):

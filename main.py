@@ -11,9 +11,8 @@ import threading
 import sqlite3
 import re
 
-sqlite_helper = importlib.import_module("sqlite_helper")
-api_helper = importlib.import_module("api_helper")
-config = importlib.import_module("config")
+import config, sqlite_helper, api_helper
+
 file_bucket = importlib.import_module(config.bucket_module)
 
 db = sqlite_helper.Sqlite_helper(config.db_filepath, config.dry_run)
